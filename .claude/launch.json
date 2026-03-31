@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "moholy-playground",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "playground", "--config", "vite.playground.config.ts"],
+      "port": 5173
+    }
+  ]
+}

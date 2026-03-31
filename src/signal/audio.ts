@@ -13,7 +13,7 @@ export class AudioSignal extends BaseSignal {
   private ctx: AudioContext | null = null
   private analyser: AnalyserNode | null = null
   private sourceNode: MediaStreamAudioSourceNode | AudioNode | null = null
-  private freqData: Uint8Array | null = null
+  private freqData: Uint8Array<ArrayBuffer> | null = null
   private opts: Required<AudioSignalOptions>
 
   constructor(options: AudioSignalOptions = {}) {
@@ -33,7 +33,7 @@ export class AudioSignal extends BaseSignal {
     this.analyser = this.ctx.createAnalyser()
     this.analyser.fftSize = this.opts.fftSize
     this.analyser.smoothingTimeConstant = this.opts.smoothing
-    this.freqData = new Uint8Array(this.analyser.frequencyBinCount)
+    this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>
 
     if (this.opts.source === 'mic') {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
