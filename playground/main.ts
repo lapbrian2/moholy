@@ -23,17 +23,21 @@ function sizeCanvas(canvas: HTMLCanvasElement, gl: WebGLRenderingContext) {
 }
 
 function compileProgram(gl: WebGLRenderingContext, vert: string, frag: string): WebGLProgram | null {
-  const vs = compileShader(gl, gl.VERTEX_SHADER, vert)
-  const fs = compileShader(gl, gl.FRAGMENT_SHADER, frag)
+  const vs = compileSh(gl, gl.VERTEX_SHADER, vert)
+  const fs = compileSh(gl, gl.FRAGMENT_SHADER, frag)
   if (!vs || !fs) return null
   const prog = gl.createProgram()!
   gl.attachShader(prog, vs)
   gl.attachShader(prog, fs)
   gl.linkProgram(prog)
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(prog))
+    return null
+  }
   return prog
 }
 
-function compileShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
+function compileSh(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
   const s = gl.createShader(type)!
   gl.shaderSource(s, src)
   gl.compileShader(s)
@@ -53,6 +57,13 @@ function setupQuad(gl: WebGLRenderingContext, program: WebGLProgram) {
   gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
 }
 
+// Uniform location cache — from WebGL best practices research
+function getUniforms(gl: WebGLRenderingContext, prog: WebGLProgram, names: string[]) {
+  const locs: Record<string, WebGLUniformLocation | null> = {}
+  for (const n of names) locs[n] = gl.getUniformLocation(prog, n)
+  return locs
+}
+
 const VERT = `
 attribute vec2 position;
 varying vec2 vUv;
@@ -63,7 +74,130 @@ void main() {
 `
 
 // ============================================================
-// HERO — full-screen ambient visual
+// SHARED GLSL — noise functions used across demos
+// From GLSL Techniques research (Quilez patterns)
+// ============================================================
+
+const GLSL_NOISE = `
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
+             mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+  float v = 0.0, a = 0.5;
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+  for (int i = 0; i < 5; i++) { v += a * noise(p); p = rot * p * 2.0 + 100.0; a *= 0.5; }
+  return v;
+}
+`
+
+// Cosine palette from Quilez — the single most useful color technique
+const GLSL_COSINE_PALETTE = `
+vec3 cosPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+  return a + b * cos(6.28318 * (c * t + d));
+}
+`
+
+// ============================================================
+// GLOBAL STATE — shared across all demos
+// ============================================================
+
+let globalPeriod = 3.0
+let globalPalette: PaletteName = 'spectral'
+let globalSmooth = 0.2
+
+const globalPeriodInput = document.getElementById('globalPeriod') as HTMLInputElement
+const globalPeriodVal = document.getElementById('globalPeriodVal')!
+const globalPaletteInput = document.getElementById('globalPalette') as HTMLSelectElement
+const globalSmoothInput = document.getElementById('globalSmooth') as HTMLInputElement
+const globalSmoothVal = document.getElementById('globalSmoothVal')!
+const globalPanel = document.getElementById('globalPanel')!
+const panelFps = document.getElementById('panelFps')!
+
+globalPeriodInput?.addEventListener('input', () => {
+  globalPeriod = parseFloat(globalPeriodInput.value)
+  globalPeriodVal.textContent = globalPeriod.toFixed(1) + 's'
+})
+
+globalPaletteInput?.addEventListener('change', () => {
+  globalPalette = globalPaletteInput.value as PaletteName
+})
+
+globalSmoothInput?.addEventListener('input', () => {
+  globalSmooth = parseFloat(globalSmoothInput.value) / 100
+  globalSmoothVal.textContent = globalSmooth.toFixed(2)
+})
+
+// Show panel after scrolling past hero
+const observer = new IntersectionObserver(([entry]) => {
+  globalPanel.classList.toggle('visible', !entry.isIntersecting)
+}, { threshold: 0.3 })
+const heroEl = document.querySelector('.hero')
+if (heroEl) observer.observe(heroEl)
+
+// ============================================================
+// OSCILLOSCOPE — Canvas 2D waveform renderer
+// From Signal Processing + UI Patterns research
+// ============================================================
+
+function drawOscilloscope(canvas: HTMLCanvasElement, data: Float32Array, channels: number) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const rect = canvas.parentElement!.getBoundingClientRect()
+  const dpr = Math.min(window.devicePixelRatio, 2)
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+
+  const w = canvas.width
+  const h = canvas.height
+  const n = Math.min(channels, data.length)
+
+  // Background
+  ctx.fillStyle = '#141416'
+  ctx.fillRect(0, 0, w, h)
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+  ctx.lineWidth = 1
+  for (let y = 0; y < h; y += h / 4) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+  }
+
+  // Center line
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+  ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke()
+
+  // Waveform — signal-green from research palette
+  ctx.strokeStyle = '#00e676'
+  ctx.lineWidth = 2 * dpr
+  ctx.beginPath()
+
+  const step = w / (n - 1)
+  for (let i = 0; i < n; i++) {
+    const x = i * step
+    const y = h - data[i] * h
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.stroke()
+
+  // Channel labels
+  ctx.fillStyle = '#55556a'
+  ctx.font = `${9 * dpr}px "Geist Mono", monospace`
+  for (let i = 0; i < n; i++) {
+    const x = i * step
+    ctx.fillText(`${i}`, x + 2, 10 * dpr)
+  }
+}
+
+// ============================================================
+// HERO — domain-warped FBM with cosine palette (Quilez)
 // ============================================================
 
 ;(function initHero() {
@@ -72,52 +206,42 @@ void main() {
   if (!gl) return
 
   const frag = `
-  precision mediump float;
+  precision highp float;
   varying vec2 vUv;
   uniform float uTime;
   uniform vec2 uRes;
-
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
-               mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-  }
-  float fbm(vec2 p) {
-    float v = 0.0, a = 0.5;
-    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
-    return v;
-  }
+  ${GLSL_NOISE}
+  ${GLSL_COSINE_PALETTE}
 
   void main() {
     vec2 uv = vUv;
     float aspect = uRes.x / uRes.y;
     uv.x *= aspect;
 
-    float t = uTime * 0.08;
-    float n1 = fbm(uv * 3.0 + t);
-    float n2 = fbm(uv * 5.0 - t * 0.7 + n1 * 0.5);
-    float n3 = fbm(uv * 2.0 + n2 * 0.8 + t * 0.3);
+    float t = uTime * 0.06;
 
-    // Dark palette: deep navy, muted gold, charcoal
-    vec3 c1 = vec3(0.04, 0.04, 0.08);  // near-black
-    vec3 c2 = vec3(0.08, 0.06, 0.12);  // deep purple
-    vec3 c3 = vec3(0.15, 0.12, 0.06);  // dark gold
-    vec3 c4 = vec3(0.05, 0.08, 0.12);  // dark teal
+    // Double domain warp (Quilez method)
+    vec2 q = vec2(fbm(uv * 2.0 + vec2(0.0, 0.0) + t),
+                  fbm(uv * 2.0 + vec2(5.2, 1.3) + t * 0.7));
+    vec2 r = vec2(fbm(uv * 2.0 + 4.0 * q + vec2(1.7, 9.2) + t * 0.3),
+                  fbm(uv * 2.0 + 4.0 * q + vec2(8.3, 2.8) + t * 0.5));
+    float f = fbm(uv * 2.0 + 4.0 * r);
 
-    vec3 col = mix(c1, c2, n1);
-    col = mix(col, c3, n2 * 0.4);
-    col = mix(col, c4, n3 * 0.3);
+    // Cosine palette — warm gold on dark (Bauhaus aesthetic)
+    vec3 col = cosPalette(f,
+      vec3(0.05, 0.04, 0.03),   // bias: very dark
+      vec3(0.15, 0.12, 0.08),   // amplitude: subtle
+      vec3(1.0, 0.8, 0.5),      // frequency
+      vec3(0.0, 0.1, 0.2)       // phase
+    );
 
-    // Subtle golden highlights on ridges
-    float ridge = smoothstep(0.45, 0.55, n2);
-    col += vec3(0.12, 0.09, 0.04) * ridge * 0.5;
+    // Add subtle golden ridge highlights
+    float ridge = smoothstep(0.45, 0.55, fract(f * 6.0));
+    col += vec3(0.10, 0.08, 0.03) * ridge * 0.4;
 
     // Vignette
     vec2 vc = (vUv - 0.5) * 2.0;
-    float vignette = 1.0 - dot(vc, vc) * 0.3;
-    col *= vignette;
+    col *= 1.0 - dot(vc, vc) * 0.25;
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -128,22 +252,20 @@ void main() {
   gl.useProgram(prog)
   setupQuad(gl, prog)
 
-  const uTime = gl.getUniformLocation(prog, 'uTime')
-  const uRes = gl.getUniformLocation(prog, 'uRes')
+  const u = getUniforms(gl, prog, ['uTime', 'uRes'])
 
   function render(t: number) {
-    gl!.uniform1f(uTime, t / 1000)
-    gl!.uniform2f(uRes, canvas.width, canvas.height)
+    gl!.uniform1f(u.uTime, t / 1000)
+    gl!.uniform2f(u.uRes, canvas.width, canvas.height)
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
     requestAnimationFrame(render)
   }
   requestAnimationFrame(render)
-
   window.addEventListener('resize', () => sizeCanvas(canvas, gl!))
 })()
 
 // ============================================================
-// PALETTE STRIPS
+// PALETTE STRIPS — animated value sweep
 // ============================================================
 
 ;(function initPalettes() {
@@ -151,28 +273,24 @@ void main() {
   if (!container) return
 
   const names: PaletteName[] = ['thermal', 'ocean', 'neon', 'monochrome', 'spectral']
-
   for (const name of names) {
     const row = document.createElement('div')
-    row.style.cssText = 'display: flex; align-items: center; gap: 12px;'
+    row.className = 'palette-row'
 
     const label = document.createElement('span')
-    label.style.cssText = `
-      font-family: var(--mono); font-size: 11px; color: var(--text-muted);
-      min-width: 90px; text-align: right; letter-spacing: 0.03em;
-    `
+    label.className = 'palette-label'
     label.textContent = name
 
     const strip = document.createElement('canvas')
+    strip.className = 'palette-strip'
     strip.width = 512
     strip.height = 32
-    strip.style.cssText = 'flex: 1; height: 32px; border: 1px solid var(--border);'
 
     const ctx = strip.getContext('2d')!
     for (let x = 0; x < 512; x++) {
       const t = x / 511
       const rgb = samplePalette(name, t)
-      ctx.fillStyle = `rgb(${Math.round(rgb.r * 255)},${Math.round(rgb.g * 255)},${Math.round(rgb.b * 255)})`
+      ctx.fillStyle = `rgb(${rgb.r * 255 | 0},${rgb.g * 255 | 0},${rgb.b * 255 | 0})`
       ctx.fillRect(x, 0, 1, 32)
     }
 
@@ -183,34 +301,25 @@ void main() {
 })()
 
 // ============================================================
-// I. SIGNALS DEMO — clock with inspector
+// I. SIGNALS DEMO — with oscilloscope waveform
 // ============================================================
 
 ;(function initSignalDemo() {
   const canvas = document.getElementById('signalDemo') as HTMLCanvasElement
+  const scopeCanvas = document.getElementById('signalScope') as HTMLCanvasElement
   const gl = createGL(canvas)
   if (!gl) return
 
   const sig = signal.clock({ period: 3 })
   sig.connect()
 
-  // Inspector bars
-  const inspEl = document.getElementById('signalInspector')!
-  for (let i = 0; i < 6; i++) {
-    const bar = document.createElement('div')
-    bar.className = 'inspector-bar'
-    bar.innerHTML = `<div class="inspector-bar-fill" id="sigBar${i}" style="height:0%"></div>`
-    inspEl.appendChild(bar)
-  }
-
   const frag = `
   precision mediump float;
   varying vec2 vUv;
   uniform float uChannels[6];
-  uniform float uTime;
+  ${GLSL_NOISE}
 
   void main() {
-    // Each channel drives a vertical band
     float band = floor(vUv.x * 6.0);
     float value = 0.0;
     for (int i = 0; i < 6; i++) {
@@ -218,16 +327,18 @@ void main() {
     }
 
     float bar = step(1.0 - vUv.y, value);
-    vec3 col = mix(
-      vec3(0.06, 0.06, 0.08),
-      vec3(0.78, 0.66, 0.42),
-      bar * 0.6
-    );
 
-    // Grid lines
-    float gridX = step(0.98, fract(vUv.x * 6.0));
-    float gridY = step(0.98, fract(vUv.y * 10.0));
-    col = mix(col, vec3(0.12, 0.12, 0.14), max(gridX, gridY));
+    // Subtle noise texture on bars
+    float n = noise(vUv * 40.0) * 0.05;
+
+    vec3 barColor = vec3(0.78, 0.66, 0.42); // accent gold
+    vec3 bgColor = vec3(0.05, 0.05, 0.06);
+    vec3 col = mix(bgColor, barColor * (0.5 + value * 0.5) + n, bar * 0.7);
+
+    // Grid
+    float gridX = step(0.97, fract(vUv.x * 6.0));
+    float gridY = step(0.97, fract(vUv.y * 10.0));
+    col = mix(col, vec3(0.1, 0.1, 0.12), max(gridX, gridY));
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -238,8 +349,7 @@ void main() {
   gl.useProgram(prog)
   setupQuad(gl, prog)
 
-  const uChannels = gl.getUniformLocation(prog, 'uChannels')
-  const uTime = gl.getUniformLocation(prog, 'uTime')
+  const u = getUniforms(gl, prog, ['uChannels'])
 
   let last = 0
   function render(t: number) {
@@ -247,14 +357,14 @@ void main() {
     last = t
     sig.update(dt)
 
-    gl!.uniform1fv(uChannels, sig.data)
-    gl!.uniform1f(uTime, t / 1000)
+    gl!.uniform1fv(u.uChannels, sig.data)
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
 
-    for (let i = 0; i < 6; i++) {
-      const el = document.getElementById(`sigBar${i}`)
-      if (el) el.style.height = (sig.data[i] * 100) + '%'
-    }
+    // Oscilloscope
+    drawOscilloscope(scopeCanvas, sig.data, 6)
+
+    // Update global panel FPS
+    if (dt > 0) panelFps.textContent = Math.round(1 / dt) + 'fps'
 
     requestAnimationFrame(render)
   }
@@ -262,7 +372,7 @@ void main() {
 })()
 
 // ============================================================
-// II. ENCODINGS DEMO — palette + displacement + emission
+// II. ENCODINGS DEMO — organic metaball with Quilez cosine palette
 // ============================================================
 
 ;(function initEncodeDemo() {
@@ -279,54 +389,44 @@ void main() {
   sig.connect()
 
   const frag = `
-  precision mediump float;
+  precision highp float;
   varying vec2 vUv;
   uniform float uTime;
   uniform vec3 uColor;
   uniform float uDisplacement;
   uniform float uEmission;
-
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
-               mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-  }
-  float fbm(vec2 p) {
-    float v = 0.0, a = 0.5;
-    for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
-    return v;
-  }
+  ${GLSL_NOISE}
 
   void main() {
     vec2 uv = (vUv - 0.5) * 2.0;
 
-    float n = fbm(uv * 3.0 + uTime * 0.2);
+    // Domain warp for organic shape
+    float n = fbm(uv * 2.5 + uTime * 0.15);
     uv += vec2(n - 0.5) * uDisplacement;
 
     float d = length(uv);
 
-    // Organic blob
+    // Organic wobble (5 harmonics)
     float angle = atan(uv.y, uv.x);
     float wobble = 0.0;
     for (int i = 1; i <= 5; i++) {
       float fi = float(i);
-      wobble += sin(angle * fi + uTime * fi * 0.3) * (0.08 / fi);
+      wobble += sin(angle * fi + uTime * fi * 0.25) * (0.07 / fi);
     }
     float radius = 0.6 + wobble;
     float shape = smoothstep(radius + 0.02, radius - 0.02, d);
 
-    vec3 col = uColor * (0.5 + shape * 0.5);
-    col += uColor * uEmission * shape * (1.0 - d * 0.8);
+    // Color with emission glow
+    vec3 col = uColor * (0.4 + shape * 0.6);
+    col += uColor * uEmission * shape * (1.0 - d * 0.7);
 
-    // Subtle inner glow
-    float inner = smoothstep(0.5, 0.0, d) * shape;
-    col += vec3(1.0) * inner * uEmission * 0.15;
+    // Inner glow
+    float inner = smoothstep(0.4, 0.0, d) * shape;
+    col += vec3(1.0) * inner * uEmission * 0.12;
 
-    // Background gradient
-    vec3 bg = mix(vec3(0.04, 0.04, 0.06), vec3(0.06, 0.05, 0.08), vUv.y);
-    col = mix(bg, col, shape * 0.9 + 0.1 * smoothstep(radius + 0.15, radius, d));
+    // Background — very subtle gradient
+    vec3 bg = mix(vec3(0.04, 0.04, 0.055), vec3(0.05, 0.045, 0.06), vUv.y);
+    col = mix(bg, col, shape * 0.9 + 0.1 * smoothstep(radius + 0.12, radius, d));
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -337,32 +437,21 @@ void main() {
   gl.useProgram(prog)
   setupQuad(gl, prog)
 
+  const u = getUniforms(gl, prog, ['uTime', 'uColor', 'uDisplacement', 'uEmission'])
+
   // Controls
   const paletteSelect = document.getElementById('paletteSelect') as HTMLSelectElement
   const displaceRange = document.getElementById('displaceRange') as HTMLInputElement
   const emissionRange = document.getElementById('emissionRange') as HTMLInputElement
 
-  let currentPalette: PaletteName = 'spectral'
-  let displaceScale = 0.4
-  let emissionScale = 1.5
-
   paletteSelect?.addEventListener('change', () => {
-    currentPalette = paletteSelect.value as PaletteName
     vis.dispose()
     vis = encode(sig, {
-      color: { channel: 2, palette: currentPalette },
-      displacement: { channel: 3, range: [-displaceScale, displaceScale], smooth: 0.05 },
-      emission: { channel: 4, range: [0.0, emissionScale] },
+      color: { channel: 2, palette: paletteSelect.value as PaletteName },
+      displacement: { channel: 3, range: [-parseFloat(displaceRange.value) / 100, parseFloat(displaceRange.value) / 100], smooth: 0.05 },
+      emission: { channel: 4, range: [0.0, (parseFloat(emissionRange.value) / 100) * 3] },
     })
     sig.connect()
-  })
-
-  displaceRange?.addEventListener('input', () => {
-    displaceScale = parseFloat(displaceRange.value) / 100
-  })
-
-  emissionRange?.addEventListener('input', () => {
-    emissionScale = (parseFloat(emissionRange.value) / 100) * 3
   })
 
   let last = 0
@@ -371,11 +460,11 @@ void main() {
     last = t
     vis.update(dt)
 
-    const u = vis.uniforms
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uTime'), t / 1000)
-    gl!.uniform3f(gl!.getUniformLocation(prog!, 'uColor'), u.color.r, u.color.g, u.color.b)
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uDisplacement'), u.displacement)
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uEmission'), u.emission)
+    const c = vis.uniforms
+    gl!.uniform1f(u.uTime, t / 1000)
+    gl!.uniform3f(u.uColor, c.color.r, c.color.g, c.color.b)
+    gl!.uniform1f(u.uDisplacement, c.displacement)
+    gl!.uniform1f(u.uEmission, c.emission)
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
 
     requestAnimationFrame(render)
@@ -384,7 +473,7 @@ void main() {
 })()
 
 // ============================================================
-// IV. TRANSFORMS DEMO — smooth vs raw
+// IV. TRANSFORMS DEMO — smooth vs raw split comparison
 // ============================================================
 
 ;(function initTransformDemo() {
@@ -393,12 +482,8 @@ void main() {
   if (!gl) return
 
   const sig = signal.clock({ period: 2 })
-  const rawEnc = encode(sig, {
-    displacement: { channel: 4, range: [0, 1] },
-  })
-  const smoothEnc = encode(sig, {
-    displacement: { channel: 4, range: [0, 1], smooth: 0.85 },
-  })
+  const rawEnc = encode(sig, { displacement: { channel: 4, range: [0, 1] } })
+  const smoothEnc = encode(sig, { displacement: { channel: 4, range: [0, 1], smooth: 0.85 } })
   sig.connect()
 
   const frag = `
@@ -408,26 +493,25 @@ void main() {
   uniform float uSmooth;
 
   void main() {
-    vec3 bg = vec3(0.04, 0.04, 0.06);
+    vec3 bg = vec3(0.04, 0.04, 0.055);
 
-    // Raw signal line (left half)
-    float rawLine = step(abs(vUv.y - uRaw), 0.005);
-    // Smooth signal line (right half)
-    float smoothLine = step(abs(vUv.y - uSmooth), 0.005);
-
-    // Trail history — vertical bars
+    // Left half: raw signal bar
     float rawBar = step(1.0 - vUv.y, uRaw) * step(vUv.x, 0.48);
+    // Right half: smooth signal bar
     float smoothBar = step(1.0 - vUv.y, uSmooth) * step(0.52, vUv.x);
 
     vec3 col = bg;
-    col = mix(col, vec3(0.5, 0.3, 0.2), rawBar * 0.15);
-    col = mix(col, vec3(0.78, 0.66, 0.42), smoothBar * 0.25);
+    col = mix(col, vec3(0.35, 0.25, 0.15), rawBar * 0.25);     // dim gold for raw
+    col = mix(col, vec3(0.78, 0.66, 0.42), smoothBar * 0.35);   // accent gold for smooth
 
     // Center divider
-    float divider = step(abs(vUv.x - 0.5), 0.002);
+    float divider = step(abs(vUv.x - 0.5), 0.001);
     col = mix(col, vec3(0.15, 0.15, 0.17), divider);
 
-    // Labels area (implied by visual split)
+    // Horizontal grid
+    float grid = step(0.98, fract(vUv.y * 10.0));
+    col = mix(col, vec3(0.08, 0.08, 0.1), grid);
+
     gl_FragColor = vec4(col, 1.0);
   }
   `
@@ -436,6 +520,8 @@ void main() {
   if (!prog) return
   gl.useProgram(prog)
   setupQuad(gl, prog)
+
+  const u = getUniforms(gl, prog, ['uRaw', 'uSmooth'])
 
   let last = 0
   function render(t: number) {
@@ -444,8 +530,8 @@ void main() {
     rawEnc.update(dt)
     smoothEnc.update(dt)
 
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uRaw'), rawEnc.uniforms.displacement)
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uSmooth'), smoothEnc.uniforms.displacement)
+    gl!.uniform1f(u.uRaw, rawEnc.uniforms.displacement)
+    gl!.uniform1f(u.uSmooth, smoothEnc.uniforms.displacement)
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
     requestAnimationFrame(render)
   }
@@ -453,7 +539,7 @@ void main() {
 })()
 
 // ============================================================
-// V. NOISE DEMO — FBM
+// V. NOISE DEMO — domain-warped FBM topographic contours
 // ============================================================
 
 ;(function initNoiseDemo() {
@@ -462,42 +548,37 @@ void main() {
   if (!gl) return
 
   const frag = `
-  precision mediump float;
+  precision highp float;
   varying vec2 vUv;
   uniform float uTime;
-
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
-               mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-  }
-  float fbm(vec2 p) {
-    float v = 0.0, a = 0.5;
-    for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
-    return v;
-  }
+  ${GLSL_NOISE}
+  ${GLSL_COSINE_PALETTE}
 
   void main() {
-    vec2 uv = vUv * 6.0;
-    float t = uTime * 0.15;
+    vec2 uv = vUv * 5.0;
+    float t = uTime * 0.12;
 
-    float n1 = fbm(uv + t);
-    float n2 = fbm(uv * 1.5 + n1 * 0.5 - t * 0.5);
-    float n3 = fbm(uv * 0.8 + n2 * 0.8 + t * 0.3);
+    // Domain warp
+    vec2 q = vec2(fbm(uv + t), fbm(uv + vec2(5.2, 1.3) + t * 0.7));
+    float n = fbm(uv + 3.0 * q);
 
     // Topographic contour lines
-    float contour = fract(n3 * 8.0);
-    float line = smoothstep(0.0, 0.04, contour) * smoothstep(0.08, 0.04, contour);
+    float contour = fract(n * 10.0);
+    float line = smoothstep(0.0, 0.03, contour) * smoothstep(0.06, 0.03, contour);
 
-    vec3 base = mix(vec3(0.04, 0.05, 0.06), vec3(0.08, 0.07, 0.1), n3);
-    vec3 lineColor = vec3(0.78, 0.66, 0.42) * 0.4;
+    // Cosine palette for elevation coloring
+    vec3 elevation = cosPalette(n,
+      vec3(0.04, 0.04, 0.05),
+      vec3(0.08, 0.06, 0.04),
+      vec3(1.0, 0.8, 0.6),
+      vec3(0.0, 0.15, 0.25)
+    );
 
-    vec3 col = mix(base, lineColor, line * 0.8);
+    vec3 lineColor = vec3(0.78, 0.66, 0.42) * 0.5;
+    vec3 col = mix(elevation, lineColor, line * 0.7);
 
-    // Subtle elevation shading
-    col += vec3(0.05) * smoothstep(0.4, 0.7, n3);
+    // Subtle elevation highlight
+    col += vec3(0.04) * smoothstep(0.5, 0.8, n);
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -508,8 +589,10 @@ void main() {
   gl.useProgram(prog)
   setupQuad(gl, prog)
 
+  const u = getUniforms(gl, prog, ['uTime'])
+
   function render(t: number) {
-    gl!.uniform1f(gl!.getUniformLocation(prog!, 'uTime'), t / 1000)
+    gl!.uniform1f(u.uTime, t / 1000)
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
     requestAnimationFrame(render)
   }
@@ -517,16 +600,16 @@ void main() {
 })()
 
 // ============================================================
-// VI. PLAYGROUND — editable code + live preview
+// VI. PLAYGROUND — editable code + live preview + oscilloscope
 // ============================================================
 
 ;(function initPlayground() {
   const canvas = document.getElementById('playgroundCanvas') as HTMLCanvasElement
+  const scopeCanvas = document.getElementById('playgroundScope') as HTMLCanvasElement
   const editor = document.getElementById('editor') as HTMLTextAreaElement
   const runBtn = document.getElementById('runBtn') as HTMLButtonElement
   const errorBanner = document.getElementById('errorBanner') as HTMLDivElement
   const fpsEl = document.getElementById('playgroundFps') as HTMLElement
-  const inspEl = document.getElementById('playgroundInspector') as HTMLElement
 
   const gl = createGL(canvas)
   if (!gl) return
@@ -538,7 +621,7 @@ void main() {
   let lastTime = 0
 
   const FRAG = `
-  precision mediump float;
+  precision highp float;
   varying vec2 vUv;
   uniform float uTime;
   uniform vec3 uColor;
@@ -546,34 +629,29 @@ void main() {
   uniform float uEmission;
   uniform float uOpacity;
   uniform float uScale;
-
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
-               mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-  }
+  ${GLSL_NOISE}
 
   void main() {
     vec2 uv = (vUv - 0.5) * 2.0 * uScale;
-    float n = noise(uv * 4.0 + uTime * 0.3);
+    float n = fbm(uv * 3.0 + uTime * 0.2);
     uv += vec2(n - 0.5) * uDisplacement;
     float d = length(uv);
 
     float angle = atan(uv.y, uv.x);
     float wobble = 0.0;
-    for (int i = 1; i <= 5; i++) {
+    for (int i = 1; i <= 6; i++) {
       float fi = float(i);
-      wobble += sin(angle * fi + uTime * fi * 0.3) * (0.06 / fi);
+      wobble += sin(angle * fi + uTime * fi * 0.2) * (0.06 / fi);
     }
-    float radius = 0.7 + wobble;
+    float radius = 0.65 + wobble;
     float shape = smoothstep(radius + 0.02, radius - 0.02, d);
 
-    vec3 col = uColor * (0.4 + shape * 0.6);
-    col += uColor * uEmission * shape * (1.0 - d * 0.7);
+    vec3 col = uColor * (0.35 + shape * 0.65);
+    col += uColor * uEmission * shape * (1.0 - d * 0.6);
+    float inner = smoothstep(0.35, 0.0, d) * shape;
+    col += vec3(1.0) * inner * uEmission * 0.1;
 
-    vec3 bg = vec3(0.04, 0.04, 0.06);
+    vec3 bg = vec3(0.04, 0.04, 0.055);
     col = mix(bg, col, shape * 0.85 + 0.15 * smoothstep(radius + 0.1, radius, d));
 
     gl_FragColor = vec4(col, uOpacity);
@@ -584,6 +662,8 @@ void main() {
   if (!program) return
   gl.useProgram(program)
   setupQuad(gl, program)
+
+  const uLocs = getUniforms(gl, program, ['uTime', 'uColor', 'uDisplacement', 'uEmission', 'uOpacity', 'uScale'])
 
   const PRESETS: Record<string, string> = {
     clock: `const sig = signal.clock({ period: 3 })
@@ -607,7 +687,7 @@ sig.connect()
 return { signal: sig, encoding: vis }`,
 
     mouse: `const sig = signal.array([0, 0, 0, 0])
-window.__moholyMH = (e) => {
+window.__mh = (e) => {
   sig.set([
     e.clientX / innerWidth,
     1 - e.clientY / innerHeight,
@@ -615,7 +695,7 @@ window.__moholyMH = (e) => {
     Math.min(Math.abs(e.movementY) / 20, 1),
   ])
 }
-addEventListener('mousemove', window.__moholyMH)
+addEventListener('mousemove', window.__mh)
 const vis = encode(sig, {
   color:        { channel: 0, palette: 'ocean', smooth: 0.08 },
   displacement: { channel: 1, range: [-0.5, 0.5], smooth: 0.06 },
@@ -626,25 +706,6 @@ sig.connect()
 return { signal: sig, encoding: vis }`,
   }
 
-  function buildInspector(sig: Signal) {
-    inspEl.innerHTML = ''
-    const n = Math.min(sig.channels, 16)
-    for (let i = 0; i < n; i++) {
-      const bar = document.createElement('div')
-      bar.className = 'inspector-bar'
-      bar.innerHTML = `<div class="inspector-bar-fill" id="pgBar${i}" style="height:0%"></div>`
-      inspEl.appendChild(bar)
-    }
-  }
-
-  function refreshInspector(sig: Signal) {
-    const n = Math.min(sig.channels, 16)
-    for (let i = 0; i < n; i++) {
-      const el = document.getElementById(`pgBar${i}`)
-      if (el) el.style.height = (sig.data[i] * 100) + '%'
-    }
-  }
-
   function cleanup() {
     if (animFrame) cancelAnimationFrame(animFrame)
     animFrame = null
@@ -652,35 +713,32 @@ return { signal: sig, encoding: vis }`,
     if (activeSig) activeSig.disconnect()
     activeSig = null
     activeEnc = null
-    if ((window as any).__moholyMH) {
-      removeEventListener('mousemove', (window as any).__moholyMH)
-      delete (window as any).__moholyMH
+    if ((window as any).__mh) {
+      removeEventListener('mousemove', (window as any).__mh)
+      delete (window as any).__mh
     }
   }
 
   function runCode(code: string) {
     cleanup()
-    errorBanner.style.display = 'none'
+    errorBanner.classList.remove('visible')
     try {
       const fn = new Function('signal', 'encode', code)
       const result = fn(signal, encode)
       if (result?.signal && result?.encoding) {
         activeSig = result.signal
         activeEnc = result.encoding
-        buildInspector(activeSig!)
         lastTime = 0
         animFrame = requestAnimationFrame(render)
       } else {
         showError('Must return { signal, encoding }')
       }
-    } catch (e: any) {
-      showError(e.message)
-    }
+    } catch (e: any) { showError(e.message) }
   }
 
   function showError(msg: string) {
     errorBanner.textContent = msg
-    errorBanner.style.display = 'block'
+    errorBanner.classList.add('visible')
   }
 
   function render(t: number) {
@@ -688,18 +746,18 @@ return { signal: sig, encoding: vis }`,
     lastTime = t
     if (activeEnc) activeEnc.update(dt)
     if (gl && program && activeEnc) {
-      gl.clearColor(0.04, 0.04, 0.05, 1)
+      gl.clearColor(0.04, 0.04, 0.055, 1)
       gl.clear(gl.COLOR_BUFFER_BIT)
-      const u = activeEnc.uniforms
-      gl.uniform1f(gl.getUniformLocation(program, 'uTime'), t / 1000)
-      gl.uniform3f(gl.getUniformLocation(program, 'uColor'), u.color.r, u.color.g, u.color.b)
-      gl.uniform1f(gl.getUniformLocation(program, 'uDisplacement'), u.displacement)
-      gl.uniform1f(gl.getUniformLocation(program, 'uEmission'), u.emission)
-      gl.uniform1f(gl.getUniformLocation(program, 'uOpacity'), u.opacity)
-      gl.uniform1f(gl.getUniformLocation(program, 'uScale'), u.scale)
+      const c = activeEnc.uniforms
+      gl.uniform1f(uLocs.uTime, t / 1000)
+      gl.uniform3f(uLocs.uColor, c.color.r, c.color.g, c.color.b)
+      gl.uniform1f(uLocs.uDisplacement, c.displacement)
+      gl.uniform1f(uLocs.uEmission, c.emission)
+      gl.uniform1f(uLocs.uOpacity, c.opacity)
+      gl.uniform1f(uLocs.uScale, c.scale)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
-    if (activeSig) refreshInspector(activeSig)
+    if (activeSig) drawOscilloscope(scopeCanvas, activeSig.data, Math.min(activeSig.channels, 16))
     if (dt > 0) fpsEl.textContent = Math.round(1 / dt) + 'fps'
     animFrame = requestAnimationFrame(render)
   }
@@ -713,26 +771,23 @@ return { signal: sig, encoding: vis }`,
 
   document.querySelectorAll('.preset-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.preset-btn').forEach((b) => { (b as HTMLElement).style.borderColor = 'var(--border)'; (b as HTMLElement).style.color = 'var(--text-dim)' })
-      ;(btn as HTMLElement).style.borderColor = 'var(--accent)'
-      ;(btn as HTMLElement).style.color = 'var(--accent)'
-      const preset = (btn as HTMLElement).dataset.preset!
-      editor.value = PRESETS[preset] ?? ''
+      document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      editor.value = PRESETS[(btn as HTMLElement).dataset.preset!] ?? ''
       runCode(editor.value)
     })
   })
 
-  // Init
   editor.value = PRESETS.clock
   runCode(editor.value)
 })()
 
 // ============================================================
-// RESIZE
+// RESIZE HANDLER
 // ============================================================
 
 window.addEventListener('resize', () => {
-  document.querySelectorAll('.demo-canvas-wrap canvas, .hero-canvas canvas').forEach((c) => {
+  document.querySelectorAll('.demo-wrap canvas, .hero-canvas canvas').forEach((c) => {
     const canvas = c as HTMLCanvasElement
     const gl = canvas.getContext('webgl')
     if (gl) sizeCanvas(canvas, gl)
