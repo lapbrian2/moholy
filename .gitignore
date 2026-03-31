@@ -3,3 +3,5 @@ dist
 dist-playground
 *.local
 .DS_Store
+
+.vercel
