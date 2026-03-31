@@ -1,0 +1,6 @@
+export { encode } from './encoder'
+export type { EncodingConfig, ChannelEncoding, EncodedOutput } from './encoder'
+export { samplePalette, generatePaletteTexture, PALETTES } from './palettes'
+export type { PaletteName, RGB } from './palettes'
+export { smooth, threshold, remap, clamp01, invert, derivative, applyCurve } from './transforms'
+export type { CurveType } from './transforms'

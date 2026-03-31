@@ -1,0 +1,56 @@
+{
+  "name": "moholy",
+  "version": "0.1.0",
+  "description": "Tiny WebGL library that maps real-time data signals to shader visual parameters",
+  "type": "module",
+  "main": "dist/moholy.umd.js",
+  "module": "dist/moholy.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/moholy.esm.js",
+      "require": "./dist/moholy.umd.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./glsl/*": "./dist/glsl/*"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite playground",
+    "build": "vite build",
+    "build:playground": "vite build --config vite.playground.config.ts",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "webgl",
+    "shader",
+    "signal",
+    "data-visualization",
+    "creative-coding",
+    "audio-visualization",
+    "glsl",
+    "uniforms",
+    "real-time",
+    "generative-art"
+  ],
+  "author": "Brian Lapinski",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lapbrian2/moholy.git"
+  },
+  "homepage": "https://moholy.vercel.app",
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vite-plugin-dts": "^3.9.0",
+    "vitest": "^1.6.0"
+  }
+}
