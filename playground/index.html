@@ -5,315 +5,764 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>moholy.js — Signal-Driven Shader Visuals</title>
   <meta name="description" content="Tiny WebGL library that maps real-time data signals to shader visual parameters. Named after Laszlo Moholy-Nagy.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Geist+Mono:wght@400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --ink: #09090b;
-      --graphite: #18181b;
-      --surface: #0a0a0c;
-      --surface-raised: #141416;
-      --surface-hover: #1c1c1e;
-      --accent: #00ccaa;
-      --accent-dim: #00997a;
-      --text: #e4e4e7;
-      --text-dim: #71717a;
-      --border: #27272a;
-      --mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
-      --sans: 'Geist', 'Inter', system-ui, sans-serif;
+      --bg: #0a0a0c;
+      --surface: #111113;
+      --surface-raised: #18181b;
+      --border: #222225;
+      --text: #e8e4df;
+      --text-dim: #8a8680;
+      --text-muted: #5a5652;
+      --accent: #c9a86c;
+      --accent-dim: #8a7448;
+      --code-bg: #0e0e10;
+      --display: 'Cormorant Garamond', Georgia, serif;
+      --body: 'Inter', system-ui, sans-serif;
+      --mono: 'Geist Mono', 'SF Mono', monospace;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      height: 100%;
-      background: var(--surface);
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: var(--bg);
       color: var(--text);
-      font-family: var(--sans);
-      font-size: 14px;
-      overflow: hidden;
+      font-family: var(--body);
+      font-weight: 300;
+      line-height: 1.7;
+      overflow-x: hidden;
     }
 
-    /* Layout */
-    .app {
-      display: grid;
-      grid-template-rows: 56px 1fr 200px;
-      grid-template-columns: 1fr 1fr;
-      height: 100vh;
-    }
-
-    /* Header */
-    .header {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      border-bottom: 1px solid var(--border);
-      background: var(--graphite);
-    }
-
-    .header h1 {
-      font-family: var(--mono);
-      font-size: 18px;
-      font-weight: 400;
-      letter-spacing: -0.02em;
+    ::selection {
+      background: rgba(201, 168, 108, 0.2);
       color: var(--text);
     }
 
-    .header h1 span {
-      color: var(--accent);
-    }
+    a { color: var(--accent-dim); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--accent); }
 
-    .header-meta {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-dim);
-    }
-
-    .header-meta a {
-      color: var(--accent-dim);
-      text-decoration: none;
-    }
-
-    .header-meta a:hover {
-      color: var(--accent);
-    }
-
-    /* Editor panel */
-    .editor-panel {
+    /* ---- HERO ---- */
+    .hero {
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      border-right: 1px solid var(--border);
-      overflow: hidden;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface-raised);
-    }
-
-    .panel-header span {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .presets {
-      display: flex;
-      gap: 6px;
-    }
-
-    .preset-btn {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 3px 10px;
-      border: 1px solid var(--border);
-      border-radius: 2px;
-      background: var(--surface);
-      color: var(--text-dim);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .preset-btn:hover, .preset-btn.active {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--surface-hover);
-    }
-
-    .editor-area {
-      flex: 1;
-      overflow: auto;
-    }
-
-    .editor-area textarea {
-      width: 100%;
-      height: 100%;
-      padding: 16px;
-      background: var(--surface);
-      color: var(--accent);
-      border: none;
-      resize: none;
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.6;
-      tab-size: 2;
-      outline: none;
-    }
-
-    .editor-area textarea::selection {
-      background: rgba(0, 204, 170, 0.2);
-    }
-
-    /* Preview canvas */
-    .preview-panel {
+      justify-content: flex-end;
+      padding: 0 clamp(32px, 6vw, 120px) 80px;
       position: relative;
       overflow: hidden;
-      background: #000;
     }
 
-    .preview-panel canvas {
+    .hero-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+
+    .hero-canvas canvas {
       width: 100%;
       height: 100%;
       display: block;
     }
 
-    .preview-overlay {
-      position: absolute;
-      top: 12px;
-      right: 12px;
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+    }
+
+    .hero h1 {
+      font-family: var(--display);
+      font-weight: 300;
+      font-size: clamp(48px, 8vw, 96px);
+      line-height: 1.0;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+    }
+
+    .hero .version {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-left: 8px;
+      vertical-align: super;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hero .tagline {
+      font-family: var(--body);
+      font-size: clamp(16px, 2vw, 20px);
+      font-weight: 300;
       color: var(--text-dim);
-      pointer-events: none;
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 32px;
     }
 
-    /* Signal inspector */
-    .inspector {
-      grid-column: 1 / -1;
-      border-top: 1px solid var(--border);
-      background: var(--graphite);
+    .hero .meta {
       display: flex;
-      flex-direction: column;
-    }
-
-    .inspector .panel-header {
-      flex-shrink: 0;
-    }
-
-    .inspector-body {
-      flex: 1;
-      display: flex;
-      align-items: stretch;
-      padding: 12px 16px;
       gap: 24px;
-      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
     }
 
-    .channel-viz {
-      flex: 1;
-      min-width: 80px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
+    .hero .meta a { color: var(--text-dim); }
+    .hero .meta a:hover { color: var(--accent); }
+
+    /* ---- FEATURES ---- */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      margin: 0;
     }
 
-    .channel-label {
+    .feature {
+      background: var(--bg);
+      padding: 48px clamp(24px, 4vw, 48px);
+    }
+
+    .feature-symbol {
+      font-family: var(--mono);
+      font-size: 24px;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: block;
+    }
+
+    .feature h3 {
+      font-family: var(--display);
+      font-weight: 400;
+      font-size: 22px;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.6;
+      max-width: 360px;
+    }
+
+    /* ---- SECTIONS ---- */
+    .section {
+      padding: clamp(80px, 12vw, 160px) clamp(32px, 6vw, 120px);
+      border-top: 1px solid var(--border);
+    }
+
+    .section-number {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      display: block;
+    }
+
+    .section h2 {
+      font-family: var(--display);
+      font-weight: 300;
+      font-size: clamp(36px, 5vw, 64px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 32px;
+    }
+
+    .section-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(40px, 6vw, 80px);
+      align-items: start;
+    }
+
+    .section-text {
+      max-width: 520px;
+    }
+
+    .section-text p {
+      font-size: 15px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+
+    /* ---- DEMO CANVASES ---- */
+    .demo-canvas-wrap {
+      position: relative;
+      aspect-ratio: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .demo-canvas-wrap canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .demo-label {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
       font-family: var(--mono);
       font-size: 10px;
-      color: var(--text-dim);
-      text-transform: uppercase;
+      color: var(--text-muted);
       letter-spacing: 0.05em;
+      text-transform: uppercase;
     }
 
-    .channel-bar-wrap {
-      flex: 1;
-      width: 100%;
+    /* ---- CONTROLS ---- */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .control-group label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .control-group select,
+    .control-group input[type="range"] {
       background: var(--surface);
-      border-radius: 2px;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 4px 8px;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .control-group select { min-width: 120px; }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 120px;
+      height: 2px;
+      background: var(--border);
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ---- CODE BLOCKS ---- */
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-dim);
+      overflow-x: auto;
+      margin-top: 24px;
+      tab-size: 2;
+      white-space: pre;
+    }
+
+    .code-block .kw { color: var(--accent); }
+    .code-block .str { color: #7ec699; }
+    .code-block .num { color: #d19a66; }
+    .code-block .cmt { color: var(--text-muted); }
+    .code-block .fn { color: #61afef; }
+
+    /* ---- SIGNAL INSPECTOR STRIP ---- */
+    .inspector-strip {
+      display: flex;
+      gap: 2px;
+      height: 48px;
+      margin-top: 16px;
+    }
+
+    .inspector-bar {
+      flex: 1;
+      background: var(--surface);
       position: relative;
       overflow: hidden;
     }
 
-    .channel-bar {
+    .inspector-bar-fill {
       position: absolute;
       bottom: 0;
       left: 0;
       width: 100%;
       background: var(--accent);
-      opacity: 0.7;
-      transition: height 0.05s linear;
+      opacity: 0.5;
+      transition: height 0.06s linear;
     }
 
-    .channel-value {
+    /* ---- TABLE OF CONTENTS ---- */
+    .toc {
+      padding: 80px clamp(32px, 6vw, 120px);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+    }
+
+    .toc-intro p {
+      font-size: 15px;
+      color: var(--text-dim);
+      max-width: 520px;
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+
+    .toc-list {
+      list-style: none;
+    }
+
+    .toc-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toc-list .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 32px;
+    }
+
+    .toc-list .title {
+      font-family: var(--display);
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--text);
+    }
+
+    /* ---- API TABLE ---- */
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+    }
+
+    .api-table th,
+    .api-table td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .api-table th {
       font-family: var(--mono);
       font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .api-table td {
       color: var(--text-dim);
     }
 
-    /* Run button */
-    .run-btn {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 3px 14px;
-      border: 1px solid var(--accent);
-      border-radius: 2px;
-      background: transparent;
-      color: var(--accent);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .run-btn:hover {
-      background: var(--accent);
-      color: var(--ink);
-    }
-
-    .error-banner {
-      padding: 8px 16px;
-      background: #331111;
-      color: #ff6666;
+    .api-table code {
       font-family: var(--mono);
       font-size: 12px;
-      display: none;
+      color: var(--accent);
+      background: var(--surface);
+      padding: 2px 6px;
     }
 
-    .error-banner.visible {
-      display: block;
+    /* ---- FOOTER ---- */
+    .footer {
+      padding: 48px clamp(32px, 6vw, 120px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-left {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .footer-right {
+      display: flex;
+      gap: 24px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .footer-right a { color: var(--text-dim); }
+    .footer-right a:hover { color: var(--accent); }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 768px) {
+      .features { grid-template-columns: 1fr; }
+      .section-body { grid-template-columns: 1fr; }
+      .toc { grid-template-columns: 1fr; gap: 40px; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="header">
-      <h1><span>moholy</span>.js</h1>
-      <div class="header-meta">
-        signal-driven shader visuals
-        &middot;
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-canvas" id="heroCanvas">
+      <canvas id="heroGL"></canvas>
+    </div>
+    <div class="hero-content">
+      <h1><span>moholy</span>.js<span class="version">0.1.0</span></h1>
+      <p class="tagline">A tiny library that maps real-time data signals to shader visual parameters. Zero dependencies.</p>
+      <div class="meta">
         <a href="https://github.com/lapbrian2/moholy" target="_blank">github</a>
-        &middot;
-        <a href="https://www.npmjs.com/package/moholy" target="_blank">npm</a>
-      </div>
-    </header>
-
-    <div class="editor-panel">
-      <div class="panel-header">
-        <span>code</span>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <div class="presets">
-            <button class="preset-btn active" data-preset="clock">clock</button>
-            <button class="preset-btn" data-preset="audio">audio</button>
-            <button class="preset-btn" data-preset="mouse">mouse</button>
-          </div>
-          <button class="run-btn" id="runBtn">run</button>
-        </div>
-      </div>
-      <div class="error-banner" id="errorBanner"></div>
-      <div class="editor-area">
-        <textarea id="editor" spellcheck="false"></textarea>
+        <span>4.67 KB gzipped</span>
+        <span>MIT license</span>
       </div>
     </div>
+  </section>
 
-    <div class="preview-panel">
-      <canvas id="preview"></canvas>
-      <div class="preview-overlay" id="fps">--fps</div>
+  <!-- FEATURES -->
+  <div class="features">
+    <div class="feature">
+      <span class="feature-symbol">~</span>
+      <h3>Signal Sources</h3>
+      <p>Audio FFT, WebSocket, fetch polling, device sensors, time oscillators, manual arrays. Six ways to pipe data in.</p>
     </div>
-
-    <div class="inspector">
-      <div class="panel-header">
-        <span>signal inspector</span>
-      </div>
-      <div class="inspector-body" id="inspectorBody">
-        <!-- Dynamically populated -->
-      </div>
+    <div class="feature">
+      <span class="feature-symbol">=</span>
+      <h3>Visual Encodings</h3>
+      <p>Map signal channels to color, displacement, opacity, emission, speed, scale. Smooth, threshold, invert, ease.</p>
+    </div>
+    <div class="feature">
+      <span class="feature-symbol">#</span>
+      <h3>GLSL Chunks</h3>
+      <p>Drop-in shader functions for palette sampling, vertex displacement, emissive glow, and GPU noise.</p>
     </div>
   </div>
+
+  <!-- TABLE OF CONTENTS -->
+  <div class="toc" id="toc">
+    <div class="toc-intro">
+      <p>moholy.js is a minimalist signal-to-shader pipeline. It connects any source of numbers — a microphone, a WebSocket feed, a gyroscope, a clock — to the visual parameters of a WebGL shader.</p>
+      <p>The library handles normalization, smoothing, palette lookup, and output formatting. You handle the rendering. It works with Three.js, raw WebGL, or anything that accepts uniform values.</p>
+      <p>Named after <a href="https://en.wikipedia.org/wiki/L%C3%A1szl%C3%B3_Moholy-Nagy" target="_blank">Laszlo Moholy-Nagy</a> (1895–1946), who built the Light-Space Modulator — a machine that transformed light into kinetic visual patterns.</p>
+    </div>
+    <ul class="toc-list">
+      <li><span class="num">I.</span> <span class="title">Signals</span></li>
+      <li><span class="num">II.</span> <span class="title">Encodings</span></li>
+      <li><span class="num">III.</span> <span class="title">Palettes</span></li>
+      <li><span class="num">IV.</span> <span class="title">Transforms</span></li>
+      <li><span class="num">V.</span> <span class="title">GLSL Chunks</span></li>
+      <li><span class="num">VI.</span> <span class="title">Playground</span></li>
+    </ul>
+  </div>
+
+  <!-- I. SIGNALS -->
+  <section class="section" id="signals">
+    <span class="section-number">I.</span>
+    <h2>Signals</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>A signal is a source of numbers that change over time. Each signal exposes a <code style="font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--surface); padding: 2px 6px;">Float32Array</code> of channel values, normalized to 0–1.</p>
+        <p>Six built-in sources ship with moholy. All share the same interface: <code style="font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--surface); padding: 2px 6px;">.connect()</code>, <code style="font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--surface); padding: 2px 6px;">.disconnect()</code>, <code style="font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--surface); padding: 2px 6px;">.update(dt)</code>.</p>
+        <table class="api-table">
+          <thead>
+            <tr><th>Source</th><th>Constructor</th><th>Channels</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Audio</td><td><code>signal.audio()</code></td><td>FFT bins</td></tr>
+            <tr><td>WebSocket</td><td><code>signal.websocket(url)</code></td><td>Parsed values</td></tr>
+            <tr><td>Fetch</td><td><code>signal.fetch(url)</code></td><td>Polled JSON</td></tr>
+            <tr><td>Array</td><td><code>signal.array(data)</code></td><td>Manual</td></tr>
+            <tr><td>Device</td><td><code>signal.device()</code></td><td>Gyro + Accel</td></tr>
+            <tr><td>Clock</td><td><code>signal.clock()</code></td><td>Oscillators</td></tr>
+          </tbody>
+        </table>
+        <div class="code-block">
+<span class="kw">const</span> sig = signal.<span class="fn">clock</span>({ <span class="str">period</span>: <span class="num">3</span> })
+sig.<span class="fn">connect</span>()
+
+<span class="cmt">// In your render loop:</span>
+sig.<span class="fn">update</span>(dt)
+<span class="cmt">// sig.data[0] = elapsed (0-1)</span>
+<span class="cmt">// sig.data[2] = sin oscillator</span>
+<span class="cmt">// sig.data[3] = cos oscillator</span>
+        </div>
+      </div>
+      <div>
+        <div class="demo-canvas-wrap">
+          <canvas id="signalDemo"></canvas>
+          <span class="demo-label">clock signal — 6 channels</span>
+        </div>
+        <div class="inspector-strip" id="signalInspector"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- II. ENCODINGS -->
+  <section class="section" id="encodings">
+    <span class="section-number">II.</span>
+    <h2>Encodings</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>An encoding maps a signal channel to a visual dimension. You declare what each channel controls — color, displacement, opacity, emission — and moholy handles the math.</p>
+        <p>The output is plain numbers and RGB values. Plug them into any shader uniform, any material property, any animation parameter.</p>
+        <div class="code-block">
+<span class="kw">const</span> vis = <span class="fn">encode</span>(sig, {
+  <span class="str">color</span>:        { channel: <span class="num">2</span>, palette: <span class="str">'spectral'</span> },
+  <span class="str">displacement</span>: { channel: <span class="num">3</span>, range: [<span class="num">-0.4</span>, <span class="num">0.4</span>] },
+  <span class="str">emission</span>:     { channel: <span class="num">4</span>, range: [<span class="num">0</span>, <span class="num">1.5</span>] },
+})
+
+<span class="cmt">// Each frame:</span>
+vis.<span class="fn">update</span>(dt)
+vis.uniforms.color       <span class="cmt">// { r, g, b }</span>
+vis.uniforms.displacement <span class="cmt">// number</span>
+vis.uniforms.emission     <span class="cmt">// number</span>
+        </div>
+      </div>
+      <div>
+        <div class="demo-canvas-wrap">
+          <canvas id="encodeDemo"></canvas>
+          <span class="demo-label">spectral palette — clock driven</span>
+        </div>
+        <div class="controls">
+          <div class="control-group">
+            <label>palette</label>
+            <select id="paletteSelect">
+              <option value="spectral">spectral</option>
+              <option value="thermal">thermal</option>
+              <option value="ocean">ocean</option>
+              <option value="neon">neon</option>
+              <option value="monochrome">monochrome</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>displacement</label>
+            <input type="range" id="displaceRange" min="0" max="100" value="40">
+          </div>
+          <div class="control-group">
+            <label>emission</label>
+            <input type="range" id="emissionRange" min="0" max="100" value="50">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- III. PALETTES -->
+  <section class="section" id="palettes">
+    <span class="section-number">III.</span>
+    <h2>Palettes</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>Five built-in palettes map a 0–1 value to a color. Pass a palette name or your own array of hex strings.</p>
+        <p>Palette sampling is continuous — moholy interpolates between color stops, not nearest-neighbor. The result is smooth gradients across the full range.</p>
+        <div class="code-block">
+<span class="cmt">// Built-in</span>
+{ palette: <span class="str">'thermal'</span> }
+
+<span class="cmt">// Custom</span>
+{ palette: [<span class="str">'#000'</span>, <span class="str">'#ff0066'</span>, <span class="str">'#00ffcc'</span>, <span class="str">'#fff'</span>] }
+        </div>
+      </div>
+      <div>
+        <div id="paletteStrips" style="display: flex; flex-direction: column; gap: 2px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- IV. TRANSFORMS -->
+  <section class="section" id="transforms">
+    <span class="section-number">IV.</span>
+    <h2>Transforms</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>Transforms modify the signal value before it reaches the visual output. They compose: smooth the raw data, threshold it, apply an easing curve, then remap the range.</p>
+        <table class="api-table">
+          <thead>
+            <tr><th>Transform</th><th>Effect</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>smooth: 0.1</code></td><td>Exponential moving average. Higher = more lag.</td></tr>
+            <tr><td><code>threshold: 0.4</code></td><td>Values below cutoff become 0.</td></tr>
+            <tr><td><code>invert: true</code></td><td>Flip: 1 - value.</td></tr>
+            <tr><td><code>curve: 'ease-in'</code></td><td>Easing: linear, ease-in, ease-out, ease-in-out.</td></tr>
+            <tr><td><code>range: [-0.5, 0.5]</code></td><td>Remap 0–1 to any output range.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="demo-canvas-wrap">
+          <canvas id="transformDemo"></canvas>
+          <span class="demo-label">smooth vs raw — same signal</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- V. GLSL CHUNKS -->
+  <section class="section" id="glsl">
+    <span class="section-number">V.</span>
+    <h2>GLSL Chunks</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>Four optional shader function libraries. Import as strings, concatenate into your shader source. Each chunk is self-contained — no dependencies between them.</p>
+        <table class="api-table">
+          <thead>
+            <tr><th>Chunk</th><th>Functions</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>glsl.color</code></td><td>moholyColor(), moholyColorBlend()</td></tr>
+            <tr><td><code>glsl.displace</code></td><td>moholyDisplace(), moholyDisplaceNoisy(), moholyDisplaceRadial()</td></tr>
+            <tr><td><code>glsl.emission</code></td><td>moholyEmission(), moholyEmissionPulse(), moholyRimEmission()</td></tr>
+            <tr><td><code>glsl.noise</code></td><td>moholyNoise2D(), moholyNoise3D(), moholyFBM()</td></tr>
+          </tbody>
+        </table>
+        <div class="code-block">
+<span class="kw">import</span> { glsl } <span class="kw">from</span> <span class="str">'moholy'</span>
+
+<span class="kw">const</span> frag = glsl.noise + glsl.color + <span class="str">`
+  void main() {
+    float n = moholyNoise2D(vUv * 10.0);
+    vec3 col = moholyColor(n, uPalette);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`</span>
+        </div>
+      </div>
+      <div>
+        <div class="demo-canvas-wrap">
+          <canvas id="noiseDemo"></canvas>
+          <span class="demo-label">FBM noise — 4 octaves</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VI. PLAYGROUND -->
+  <section class="section" id="playground">
+    <span class="section-number">VI.</span>
+    <h2>Playground</h2>
+    <div class="section-body">
+      <div class="section-text">
+        <p>Edit the code below and press Cmd+Enter to run. The canvas on the right renders in real time.</p>
+        <div style="position: relative;">
+          <textarea id="editor" spellcheck="false" style="
+            width: 100%;
+            min-height: 280px;
+            padding: 20px 24px;
+            background: var(--code-bg);
+            color: var(--accent);
+            border: 1px solid var(--border);
+            resize: vertical;
+            font-family: var(--mono);
+            font-size: 13px;
+            line-height: 1.7;
+            tab-size: 2;
+            outline: none;
+          "></textarea>
+          <button id="runBtn" style="
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 4px 16px;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+          ">run</button>
+        </div>
+        <div id="errorBanner" style="
+          padding: 8px 16px;
+          background: #1a0a0a;
+          color: #cc4444;
+          font-family: var(--mono);
+          font-size: 12px;
+          display: none;
+          margin-top: 2px;
+          border: 1px solid #331111;
+        "></div>
+        <div class="controls" style="margin-top: 12px;">
+          <button class="preset-btn active" data-preset="clock" style="
+            font-family: var(--mono); font-size: 11px; padding: 4px 12px;
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--text-dim); cursor: pointer;
+          ">clock</button>
+          <button class="preset-btn" data-preset="audio" style="
+            font-family: var(--mono); font-size: 11px; padding: 4px 12px;
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--text-dim); cursor: pointer;
+          ">audio</button>
+          <button class="preset-btn" data-preset="mouse" style="
+            font-family: var(--mono); font-size: 11px; padding: 4px 12px;
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--text-dim); cursor: pointer;
+          ">mouse</button>
+        </div>
+      </div>
+      <div>
+        <div class="demo-canvas-wrap" style="aspect-ratio: auto; height: 420px;">
+          <canvas id="playgroundCanvas"></canvas>
+          <span class="demo-label" id="playgroundFps">--fps</span>
+        </div>
+        <div class="inspector-strip" id="playgroundInspector" style="margin-top: 2px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-left">
+      moholy.js — Brian Lapinski, 2026
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/lapbrian2/moholy" target="_blank">GitHub</a>
+      <a href="https://www.npmjs.com/package/moholy" target="_blank">npm</a>
+      <span style="color: var(--text-muted);">MIT</span>
+    </div>
+  </footer>
 
   <script type="module" src="./main.ts"></script>
 </body>
