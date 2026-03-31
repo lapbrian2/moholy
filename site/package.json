@@ -1,0 +1,24 @@
+{
+  "name": "moholy-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "@studio-freight/lenis": "^1.0.42",
+    "@tresjs/cientos": "^5.7.0",
+    "@tresjs/nuxt": "^5.6.0",
+    "gsap": "^3.14.2",
+    "nuxt": "^3.17.0",
+    "three": "^0.183.2",
+    "vue": "latest"
+  },
+  "devDependencies": {
+    "@types/three": "^0.183.1",
+    "typescript": "^5.4.0"
+  }
+}

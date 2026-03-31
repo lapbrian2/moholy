@@ -5,3 +5,7 @@ dist-playground
 .DS_Store
 
 .vercel
+site/node_modules
+site/.nuxt
+site/.output
+site/dist

@@ -1,0 +1,68 @@
+/* ============================================================
+   moholy.js docs — Design tokens + base styles
+   Research-driven: UI Patterns agent palette + typography
+   ============================================================ */
+
+:root {
+  --bg-deep: #0c0c0e;
+  --bg-surface: #141416;
+  --bg-elevated: #1c1c20;
+  --bg-hover: #24242a;
+  --border: #2a2a32;
+  --border-active: #3a3a44;
+  --text-primary: #e0e0e4;
+  --text-secondary: #8888a0;
+  --text-muted: #55556a;
+  --accent: #c9a86c;
+  --accent-dim: #8a7448;
+  --signal-green: #00e676;
+  --code-bg: #0e0e11;
+  --display: 'Cormorant Garamond', Georgia, serif;
+  --body: 'Inter', system-ui, sans-serif;
+  --mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--body);
+  font-weight: 300;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(201, 168, 108, 0.25);
+  color: #fff;
+}
+
+a { color: var(--accent-dim); text-decoration: none; transition: color 0.3s; }
+a:hover { color: var(--accent); }
+code { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--bg-surface); padding: 2px 6px; }
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition-duration: 0.01ms !important; }
+}
