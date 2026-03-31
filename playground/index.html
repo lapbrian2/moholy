@@ -10,7 +10,7 @@
   <meta property="og:description" content="Signal-driven shader visuals. Zero dependencies. 4.67KB gzipped.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
        DESIGN TOKENS — from UI Patterns research
@@ -55,13 +55,27 @@
     }
 
     ::selection {
-      background: rgba(201, 168, 108, 0.2);
-      color: var(--text-primary);
+      background: rgba(201, 168, 108, 0.25);
+      color: #fff;
     }
 
-    a { color: var(--accent-dim); text-decoration: none; transition: color 0.2s; }
+    a { color: var(--accent-dim); text-decoration: none; transition: color 0.3s; }
     a:hover { color: var(--accent); }
     code { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--bg-surface); padding: 2px 6px; }
+
+    /* Scroll-driven fade-in */
+    .reveal {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
 
     /* ============================================================
        HERO — full viewport with domain-warped FBM background
@@ -93,39 +107,44 @@
     .hero h1 {
       font-family: var(--display);
       font-weight: 300;
-      font-size: clamp(52px, 8vw, 104px);
-      line-height: 1.0;
-      letter-spacing: -0.03em;
+      font-size: clamp(64px, 10vw, 140px);
+      line-height: 0.92;
+      letter-spacing: -0.04em;
       color: var(--text-primary);
-      margin-bottom: 16px;
+      margin-bottom: 24px;
     }
 
     .hero h1 .dot { color: var(--accent); }
 
     .hero .version {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      margin-left: 8px;
+      margin-left: 6px;
       vertical-align: super;
+      letter-spacing: 0.05em;
     }
 
     .hero .tagline {
-      font-size: clamp(16px, 2vw, 20px);
+      font-family: var(--display);
+      font-style: italic;
+      font-size: clamp(18px, 2.5vw, 24px);
       font-weight: 300;
       color: var(--text-secondary);
-      max-width: 520px;
-      line-height: 1.6;
-      margin-bottom: 32px;
+      max-width: 540px;
+      line-height: 1.5;
+      margin-bottom: 40px;
+      letter-spacing: 0.01em;
     }
 
     .hero .meta {
       display: flex;
-      gap: 24px;
+      gap: 32px;
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
     .hero .meta a { color: var(--text-secondary); }
 
@@ -141,28 +160,30 @@
 
     .feature {
       background: var(--bg-deep);
-      padding: 48px clamp(24px, 4vw, 48px);
+      padding: 56px clamp(28px, 4vw, 56px);
     }
 
     .feature-symbol {
       font-family: var(--mono);
-      font-size: 24px;
+      font-size: 32px;
       color: var(--accent);
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       display: block;
+      opacity: 0.7;
     }
 
     .feature h3 {
       font-family: var(--display);
-      font-weight: 400;
-      font-size: 22px;
-      margin-bottom: 8px;
+      font-weight: 300;
+      font-size: 26px;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
     }
 
     .feature p {
       font-size: 14px;
       color: var(--text-secondary);
-      line-height: 1.6;
+      line-height: 1.7;
       max-width: 360px;
     }
 
@@ -212,33 +233,33 @@
        SECTIONS — chapter structure
        ============================================================ */
     .section {
-      padding: clamp(80px, 12vw, 160px) clamp(32px, 6vw, 120px);
+      padding: clamp(100px, 14vw, 200px) clamp(32px, 6vw, 120px);
       border-top: 1px solid var(--border);
     }
 
     .section-number {
       font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-muted);
-      letter-spacing: 0.1em;
+      font-size: 11px;
+      color: var(--accent-dim);
+      letter-spacing: 0.15em;
       text-transform: uppercase;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       display: block;
     }
 
     .section h2 {
       font-family: var(--display);
       font-weight: 300;
-      font-size: clamp(36px, 5vw, 64px);
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-      margin-bottom: 32px;
+      font-size: clamp(44px, 6vw, 80px);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 48px;
     }
 
     .section-body {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: clamp(40px, 6vw, 80px);
+      gap: clamp(48px, 7vw, 100px);
       align-items: start;
     }
 
@@ -247,8 +268,8 @@
     .section-text p {
       font-size: 15px;
       color: var(--text-secondary);
-      margin-bottom: 20px;
-      line-height: 1.7;
+      margin-bottom: 24px;
+      line-height: 1.75;
     }
 
     /* ============================================================
@@ -635,7 +656,7 @@
     </div>
     <div class="hero-content">
       <h1>moholy<span class="dot">.</span>js<span class="version">0.1.0</span></h1>
-      <p class="tagline">A tiny library that maps real-time data signals to shader visual parameters. Zero dependencies.</p>
+      <p class="tagline">A tiny library that maps real-time data signals<br>to shader visual parameters. Zero dependencies.</p>
       <div class="meta">
         <a href="https://github.com/lapbrian2/moholy" target="_blank">github</a>
         <span>4.67 KB gzipped</span>
@@ -646,17 +667,17 @@
 
   <!-- FEATURES -->
   <div class="features">
-    <div class="feature">
+    <div class="feature reveal">
       <span class="feature-symbol">~</span>
       <h3>Signal Sources</h3>
       <p>Audio FFT, WebSocket, fetch polling, device sensors, time oscillators, manual arrays. Six ways to pipe data in.</p>
     </div>
-    <div class="feature">
+    <div class="feature reveal reveal-delay-1">
       <span class="feature-symbol">=</span>
       <h3>Visual Encodings</h3>
       <p>Map signal channels to color, displacement, opacity, emission, speed, scale. Smooth, threshold, invert, ease.</p>
     </div>
-    <div class="feature">
+    <div class="feature reveal reveal-delay-2">
       <span class="feature-symbol">#</span>
       <h3>GLSL Chunks</h3>
       <p>Drop-in shader functions for palette sampling, vertex displacement, emissive glow, and GPU noise.</p>
